@@ -3,7 +3,11 @@
     <head>
         @include('partials.head')
     </head>
-    <body x-bind:class="{ 'dark bg-gray-700': darkTheme, 'bg-gray-400': !darkTheme }">
+    {{-- <body x-bind:class="{ 'dark bg-gray-700': darkTheme, 'bg-gray-400': !darkTheme }"> --}}
+    {{-- <body x-bind:class="{ 'dark bg-gray-700': darkTheme, 'bg-linear-to-r from-indigo-50 via-sky-50 to-emerald-50 min-h-screen': !darkTheme }"> --}}
+    <body x-bind:class="{ 'dark bg-gray-700': darkTheme, 'bg-gradient-to-tr from-amber-50 via-rose-50 to-indigo-50': !darkTheme }">
+    {{-- <body x-bind:class="{ 'dark bg-gray-700': darkTheme, 'bg-gradient-to-br from-sky-50 via-teal-50/30 to-emerald-50/20': !darkTheme }"> --}}
+    {{-- <body x-bind:class="{ 'dark bg-gray-700': darkTheme, 'bg-zinc-50 bg-[radial-gradient(#e4e4e7_1px,transparent_1px)] [bg-size:16px_16px] min-h-screen': !darkTheme }"> --}}
         <x-dialog />
         <x-toast />
         <x-layout>
@@ -80,9 +84,7 @@
                     </x-slot:footer>
                 </x-side-bar>
             </x-slot:menu>
-
             {{ $slot }}
-
         </x-layout>
 
         @livewireScripts

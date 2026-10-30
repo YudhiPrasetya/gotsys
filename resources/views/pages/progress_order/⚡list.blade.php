@@ -6,6 +6,8 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Lazy;
 use Livewire\Attributes\Computed;
 
+use App\Services\ProgressOrderService;
+
 use App\Models\ProgressOrder;
 use App\Models\ProcessSequence;
 use App\Models\ProcessSequenceOrder;
@@ -15,6 +17,12 @@ use Carbon\Carbon;
 
 new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
 {
+    private ProgressOrderService $progressOrderService;
+
+    public function boot(ProgressOrderService $progressOrderService){
+        $this->progressOrderService = $progressOrderService;
+    }
+
     use WithPagination;
 
     public ?int $quantity = 10;
@@ -24,17 +32,18 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
         'direction' => 'asc',
     ];
 
-    #[Computed]
-    public function getProgressOrders(){
-        return Order::query()
-                        ->when($this->search, function(Builder $query){
-                            return $query->where('product_name', 'like', "%{$this->search}%");
-                        })
-                        ->where('status_process', 'In Progress')
-                        ->with(['customer', 'progressOrders', 'processSequenceOrders'])
-                        ->orderBy(...array_values($this->sort))
-                        ->paginate($this->quantity)
-                        ->withQueryString();
+    public function progressOrders(){
+        // return Order::query()
+        //                 ->when($this->search, function(Builder $query){
+        //                     return $query->where('product_name', 'like', "%{$this->search}%");
+        //                 })
+        //                 ->where('status_process', 'In Progress')
+        //                 ->with(['customer', 'progressOrders', 'processSequenceOrders'])
+        //                 ->orderBy(...array_values($this->sort))
+        //                 ->paginate($this->quantity)
+        //                 ->withQueryString();
+
+        return $this->progressOrderService->getProgressOrders($this->quantity, $this->search, $this->sort);
 
     }
 
@@ -59,7 +68,7 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
     public function with(){
         return[
             $this->headers,
-            'rows' => $this->getProgressOrders()
+            'rows' => $this->progressOrders()
         ];
     }
 };
@@ -84,7 +93,7 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
             <x-button class="mb-2" sm text="Add New" color="purple" icon="plus-circle" href="{{ route('create-ProgressOrder') }}" wire:navigate.hover />
         @endcan
 
-        <x-table :$headers :$rows :quantity="[2,5,10,15,20,25]" :$sort striped filter paginate loading>
+        <x-table :$headers :$rows :quantity="[2,5,10,15,20,25]" striped :$sort filter paginate loading>
             @interact('column_deadline', $row)
                 {{ $row->deadline->format('Y-m-d') }}
             @endinteract
@@ -92,7 +101,7 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
             @interact('column_progressOrder', $row)
                 @php
                     $order = Order::find($row->id);
-                    $rstPSO = ProcessSequenceOrder::where('order_id', $row->id)->get()->toArray();
+                    $rstPSO = ProcessSequenceOrder::where('order_id', $row->id)->orderBy('ordinal', 'asc')->get()->toArray();
                     $rstPO = ProgressOrder::where('order_id', $row->id)->get()->toArray();
 
                     $rstMatch = array_filter($rstPSO, fn($item) => in_array($item['process_sequence_id'], array_column($rstPO, 'process_sequence_id')));

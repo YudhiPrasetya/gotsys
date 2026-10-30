@@ -3,7 +3,8 @@
     <head>
         @include('partials.head')
     </head>
-    <body class="min-h-screen bg-gray-500 antialiased dark:bg-linear-to-b dark:from-neutral-950 dark:to-neutral-900">
+    {{-- <body class="min-h-screen bg-gray-500 antialiased dark:bg-linear-to-b dark:from-neutral-950 dark:to-neutral-900"> --}}
+    <body class="min-h-screen bg-gradient-to-br from-sky-50 via-teal-50/30 to-emerald-50/20">
     {{-- <body x-bind:class="{ 'dark bg-gray-700': darkTheme, 'bg-white': !darkTheme }"> --}}
         {{-- <x-button x-on:click="darkTheme = !darkTheme">Light / Dark Mode</x-button> --}}
         <div class="flex min-h-svh flex-col items-center justify-center gap-6 p-6 md:p-10">

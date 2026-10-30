@@ -5,10 +5,17 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Validate;
 use Livewire\Attributes\Lazy;
 use TallStackUi\Traits\Interactions;
+use App\Services\ProcessSequenceService;
 use App\Models\ProcessSequence;
 
 new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
 {
+    private ProcessSequenceService $processSequenceService;
+
+    public function boot(ProcessSequenceService $processSequenceService){
+        $this->processSequenceService = $processSequenceService;
+    }
+
     use Interactions;
 
     #[Validate('required')]
@@ -27,28 +34,32 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
     }
 
     public function saveAndCreate(){
-        $this->save();
-        // $this->messageSuccess();
-        $this->toast()
-             ->timeout(2)
-             ->position('top-center')
-             ->success('Success', 'New process sequence data added succesfully!')
-             ->hook([
+        if($this->save()){
+            // $this->messageSuccess();
+            $this->toast()
+                ->timeout(2)
+                ->position('top-center')
+                ->success('Success', 'New process sequence data added succesfully!')
+                ->hook([
                 'timeout' => [
                     'method' => 'clearModel'
                 ]
-             ])
-             ->send();
+            ])
+            ->send();
+        };
     }
 
     private function save(){
         $this->validate();
-
-        ProcessSequence::create([
+        $newProcessSequence = [
+            'id' => 0,
             'process_name' => $this->processName,
             'alias' => $this->alias,
             'description' => $this->description
-        ]);
+        ];
+
+        $saved = $this->processSequenceService->updateProcessSequence($newProcessSequence);
+        return $saved;
         // $this->messageSuccess();
     }
 

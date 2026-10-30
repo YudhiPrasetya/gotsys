@@ -4,10 +4,17 @@ use Livewire\Component;
 use Livewire\WithPagination;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Lazy;
+use App\Services\OrderService;
 use App\Models\Order;
 
 new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
 {
+    private OrderService $orderService;
+
+    public function boot(OrderService $orderService){
+        $this->orderService = $orderService;
+    }
+
     use WithPagination;
 
     public array $headers = [
@@ -30,7 +37,8 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
 
     public function with(): array{
         return [ $this->headers,
-            'rows' => Order::with(['customer:id,name'])->where('status_process', 'pending')->paginate(10)->withQueryString()
+            // 'rows' => Order::with(['customer:id,name'])->where('status_process', 'pending')->paginate(10)->withQueryString()
+            'rows' => $this->orderService->orderList()
         ];
     }
 };

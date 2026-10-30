@@ -14,6 +14,10 @@ use TallStackUi\Traits\Interactions;
 
 use Carbon\Carbon;
 
+use App\Events\OrderPendingAdded;
+use App\Events\OrderRunningAdded;
+use App\Events\UpdateProgressOrderCharts;
+
 new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
 {
     use Interactions;
@@ -108,8 +112,15 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
                 'progress_order_id' => $newProgressOrder->id,
                 'process_sequence_id' => $this->selectedProcess,
                 'qty' => $this->qtyInput
-            ]))
-            return Order::find($this->selectedOrder)->update(['status_process' => 'In Progress']);
+            ])){
+                $order = Order::find($this->selectedOrder)->update(['status_process' => 'In Progress']);
+                if($order){
+                    OrderPendingAdded::dispatch(Order::where('status_process', 'pending')->count());
+                    OrderRunningAdded::dispatch(Order::where('status_process', 'In Progress')->count());
+                    UpdateProgressOrderCharts::dispatch('Update the progress order charts!');
+                    return $order;
+                }
+            }
         }
     }
 

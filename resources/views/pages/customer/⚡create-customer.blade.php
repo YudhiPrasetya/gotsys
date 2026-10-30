@@ -5,12 +5,19 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Lazy;
 use Livewire\Attributes\Validate;
 use TallStackUi\Traits\Interactions;
+use App\Services\CustomerService;
 use App\Models\Customer;
 
 use App\Events\CustomerAdded;
 
 new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
 {
+    private CustomerService $customerService;
+
+    public function boot(CustomerService $customerService){
+        $this->customerService = $customerService;
+    }
+
     use Interactions;
 
     #[Validate('required')]
@@ -49,13 +56,23 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
     private function save(){
         $this->validate();
 
-        Customer::create([
+        // Customer::create([
+        //     'name' => $this->customerName,
+        //     'address' => $this->customerAddress,
+        //     'prefix_phone' => $this->prefixPhone,
+        //     'phone' => $this->customerPhone
+        // ]);
+        $newCustomer = [
+            'id' => 0,
             'name' => $this->customerName,
             'address' => $this->customerAddress,
             'prefix_phone' => $this->prefixPhone,
             'phone' => $this->customerPhone
-        ]);
+        ];
+        $updated = $this->customerService->updateCustomer($newCustomer);
+
         CustomerAdded::dispatch(Customer::count());
+        return $updated;
     }
 
     public function clearModel(){

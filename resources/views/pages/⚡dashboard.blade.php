@@ -24,10 +24,18 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
     public array $chartOrders = [];
 
     public int $customerCount = 0;
+    public int $orderCount = 0;
+    public int $pendingOrderCount = 0;
+    public int $runningOrderCount = 0;
+    public int $finishOrderCount = 0;
 
     public function mount(){
         $this->generateInProgressOrdersChart();
         $this->customerCount = Customer::count();
+        $this->orderCount = Order::count();
+        $this->pendingOrderCount = Order::where('status_process', 'pending')->count();
+        $this->runningOrderCount = Order::where('status_process', 'In Progress')->count();
+        $this->finishOrderCount = Order::where('status_process', 'Finish')->count();
     }
 
     #[Computed]
@@ -59,17 +67,20 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
     public function getProgressOrders(){
         return Order::query()
                         ->where('status_process', 'In Progress')
-                        ->with(['customer', 'progressOrders', 'processSequenceOrders'])
+                        ->with(['customer', 'progressOrders', 'processSequenceOrders' => function($query){
+                            $query->orderBy('ordinal', 'asc');
+                        }])
                         ->paginate(5)
                         ->withQueryString();
 
     }
 
-    #[Computed]
     public function generateInProgressOrdersChart(){
-        $inProgressOrders = Order::where('status_process', 'In Progress')->with(['customer', 'progressOrders', 'processSequenceOrders'])->get()->toArray();
+        $inProgressOrders = Order::where('status_process', 'In Progress')->with(['customer', 'progressOrders', 'processSequenceOrders' => function($query){
+            $query->orderBy('ordinal', 'asc');
+        }])->get()->toArray();
 
-        foreach($inProgressOrders as $index => $inProgressOrder){
+        foreach($inProgressOrders as $inProgressOrder){
             $series = [];
             foreach($inProgressOrder['process_sequence_orders'] as $pso){
                 if(in_array($pso['process_sequence_id'], array_column($inProgressOrder['progress_orders'], 'process_sequence_id'))){
@@ -88,10 +99,6 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
                 'series' => $series
             ];
         }
-        // foreach($this->chartOrders as $co){
-        //     dump( $co['series']);
-        //     dump($co['labels']);
-        // }
     }
 
     public array $headers= [
@@ -128,14 +135,49 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
             HTML;
     }
 
-    #[On('echo:orders,OrderUpdated')]
-    public function handleOrderUpdated($event){
-        $this->generateInProgressOrdersChart();
-    }
+    // #[On('echo:orders,OrderUpdated')]
+    // public function handleOrderUpdated($event){
+    //     $this->generateInProgressOrdersChart();
+    // }
 
     #[On('echo:customer-added,.customer.added')]
     public function handleAddCustomer($event){
         $this->customerCount = $event['totalCustomers'];
+    }
+
+    #[On('echo:order-added,.order.added')]
+    public function handleAddOrder($event){
+        $this->orderCount = $event['totalOrders'];
+    }
+
+    #[On('echo:order-pending-added,.order.pending.added')]
+    public function handleAddPendingOrder($event){
+        $this->pendingOrderCount = $event['totalPendingOrders'];
+    }
+
+    #[On('echo:order-running-added,.order.running.added')]
+    public function handleAddRunningOrder($event){
+        $this->runningOrderCount = $event['totalRunningOrders'];
+    }
+
+    #[On('echo:order-finish-added,.order.finish.added')]
+    public function handleAddFinishOrder($event){
+        $this->finishOrderCount = $event['totalFinishOrders'];
+    }
+
+    #[On('echo:update-progress-order-charts,.update.progress.order.charts')]
+    public function handleUpdateProgressOrderCharts($msg){
+        $this->chartOrders = [];
+        $this->toast()
+        ->timeout(1)
+        ->success('Success', $msg['message'])
+        ->position('top-center')
+        ->hook([
+            'timeout' => [
+                'method' => 'generateInProgressOrdersChart'
+            ]
+        ])
+        ->send();
     }
 
 };
@@ -144,13 +186,13 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
 <div>
     <div class="flex justify-center gap-6 mb-4">
         <x-stats title="Customers" icon="swatch" color="pink" :number="$this->customerCount" animated duration="3"/>
-        <x-stats title="Total Orders" icon="swatch" color="pink" :number="$this->countOrders" animated duration="3"/>
-        <x-stats title="Total Pending Orders" icon="swatch" color="pink" :number="$this->countPendingOrders" animated duration="3"/>
-        <x-stats title="Total Running Orders" icon="swatch" color="pink" :number="$this->countRunningOrders" animated duration="3"/>
-        <x-stats title="Total Finish Orders" icon="swatch" color="pink" :number="$this->countFinishOrders" animated duration="3"/>
+        <x-stats title="Total Orders" icon="archive-box" color="emerald" :number="$this->orderCount" animated duration="3"/>
+        <x-stats title="Total Pending Orders" icon="arrow-left-circle" color="purple" :number="$this->pendingOrderCount" animated duration="3"/>
+        <x-stats title="Total Running Orders" icon="arrow-path-rounded-square" color="violet" :number="$this->runningOrderCount" animated duration="3"/>
+        <x-stats title="Total Finish Orders" icon="academic-cap" color="green" :number="$this->finishOrderCount" animated duration="3"/>
     </div>
 
-    <div class="mb-4 flex gap-4 justify-center">
+    <div class="mb-4 flex flex-wrap gap-4 justify-center">
             @foreach($this->chartOrders as $co)
                 <div class="flex w-100">
                     <x-card color="purple" accent minimize>
@@ -159,25 +201,52 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
                             <h1 class="text-xl font-bold">Progress Orders in Chart</h1>
                         </x-slot:header>
 
+                        <div class="flex flex-col gap-0.5 items-center justify-center">
+                            <div class="flex items-center gap-1">
+                                <p class="text-sm text-muted">Product:</p>
+                                <p class="text-sm font-bold">{{ $co['product'] }}</p>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <p class="text-sm text-muted">Customer:</p>
+                                <p class="text-sm font-bold">{{ $co['customer'] }}</p>
+                            </div>
+                            <div class="flex items-center gap-1">
+                                <p class="text-sm text-muted">Quantity Order:</p>
+                                <p class="text-sm font-bold">{{ $co['quantity'] }}</p>
+                            </div>
+                        </div>
+
+                        {{-- <div class="mb-4">
+                            @php
+                                // dump($co['labels']);
+                                // dump($co['series']);
+
+                                $headers = [];
+                                foreach($co['labels'] as $label){
+                                    // $headers[] = ['index' => 'name', 'label' => $label];
+                                    $dataHeader = ['index' => 'name', 'label' => $label];
+                                    $headers[] = $dataHeader;
+                                }
+                                dump($headers);
+
+                                $rows = [];
+                                foreach($co['series'] as $index => $seri){
+                                    // $rows[] = ['name' => $seri];
+                                    $dataRow = ['name' => $seri];
+                                    $rows[] = $dataRow; 
+                                }
+                                dump($rows);
+                            @endphp
+                            <x-table compact :$headers :$rows  />
+                        </div> --}}
+
+
                         <x-chart :series="$co['series']"
                                     :labels="$co['labels']"
                                     fit="thin"
                                     color="emerald"
                                     grid tooltip
                                 >
-                            <x-slot:header>
-                                <div class="flex flex-col gap-3 items-center justify-center">
-                                    <div>
-                                        Product: {{ $co['product'] }}
-                                    </div>
-                                    <div>
-                                        Customer: {{ $co['customer'] }}
-                                    </div>
-                                    <div>
-                                        Quantity: {{ $co['quantity'] }}
-                                    </div>
-                                </div>
-                            </x-slot:header>
                         </x-chart>
                     </x-card>
                 </div>
@@ -188,10 +257,10 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
         <x-card color="violet" accent minimize>
             <x-slot:header class="flex justify-between gap-2">
                 <x-icon name="list-bullet" xl />
-                <h1 class="text-2xl font-bold">Progress Orders</h1>
+                <h1 class="text-2xl font-bold">Progress Running Orders</h1>
             </x-slot:header>
 
-            <x-table :$headers :$rows striped loading compact>
+            <x-table :$headers :$rows striped paginate loading compact>
                 @interact('column_deadline', $row)
                     {{ $row->deadline->format('Y-m-d') }}
                 @endinteract
@@ -199,7 +268,7 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
                 @interact('column_progressOrder', $row)
                     @php
                         $order = Order::find($row->id);
-                        $rstPSO = ProcessSequenceOrder::where('order_id', $row->id)->get()->toArray();
+                        $rstPSO = ProcessSequenceOrder::where('order_id', $row->id)->orderBy('ordinal', 'asc')->get()->toArray();
                         $rstPO = ProgressOrder::where('order_id', $row->id)->get()->toArray();
 
                         $rstMatch = array_filter($rstPSO, fn($item) => in_array($item['process_sequence_id'], array_column($rstPO, 'process_sequence_id')));

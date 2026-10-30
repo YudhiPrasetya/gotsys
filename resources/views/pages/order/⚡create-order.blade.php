@@ -6,14 +6,30 @@ use Livewire\Attributes\Lazy;
 use Livewire\Attributes\Validate;
 use TallStackUi\Traits\Interactions;
 
+use App\Services\CustomerService;
+use App\Services\OrderService;
+use App\Services\ProcessSequenceOrderService;
+
 use App\Models\Customer;
 use App\Models\Order;
-use App\Models\ProcessSequence;
-use App\Models\ProcessSequenceOrder;
+
 use Carbon\Carbon;
+
+use App\Events\OrderAdded;
+use App\Events\OrderPendingAdded;
 
 new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
 {
+    private CustomerService $customerService;
+    private OrderService $orderService;
+    private ProcessSequenceOrderService $processSequenceOrderService;
+
+    public function boot(CustomerService $customerService, OrderService $orderService, ProcessSequenceOrderService $processSequenceOrderService){
+        $this->customerService = $customerService;
+        $this->orderService = $orderService;
+        $this->processSequenceOrderService = $processSequenceOrderService;
+    }
+
     use Interactions;
 
     #[Validate('required')]
@@ -33,7 +49,8 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
     public int $orderId;
 
     public function mount(){
-        $this->customers = Customer::select(['id', 'name'])->get();
+        // $this->customers = Customer::select(['id', 'name'])->get();
+        $this->customers = $this->customerService->getCustomerForSelect();
     }
 
     public function placeholder(): string{
@@ -45,46 +62,52 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
     }
 
     public function saveAndCreate(){
-        $this->save();
-        $this->toast()
-             ->timeout(2)
-             ->position('top-center')
-             ->success('Success', 'New order added succesfully!')
-             ->hook([
+        if($this->save()){
+            $this->toast()
+                ->timeout(2)
+                ->position('top-center')
+                ->success('Success', 'New order added succesfully!')
+                ->hook([
                 'timeout' => [
                     'method' => 'clearModel'
                 ]
-             ])
-             ->send();
+            ])
+            ->send();
+        };
     }
 
     private function save(){
         $this->validate();
 
-        $this->orderId = Order::insertGetId([
+        // $this->orderId = Order::insertGetId([
+        //     'customer_id' => $this->selectedCustomer,
+        //     'product_name' => $this->product,
+        //     'quantity' => $this->qty,
+        //     'deadline' => $this->deadline,
+        //     'created_at' => Carbon::now('Asia/Jakarta'),
+        //     'updated_at' => Carbon::now('Asia/Jakarta')
+        // ]);
+
+        $newOrder = [
             'customer_id' => $this->selectedCustomer,
             'product_name' => $this->product,
             'quantity' => $this->qty,
             'deadline' => $this->deadline,
             'created_at' => Carbon::now('Asia/Jakarta'),
             'updated_at' => Carbon::now('Asia/Jakarta')
-        ]);
-        $idOrder = $this->orderId;
+        ];
 
-        // insert to process sequence order table
-        $processSequenceOrders = ProcessSequence::all()->map(function ($ps) use($idOrder) {
-            return [
-                'order_id' => $idOrder,
-                'process_sequence_id' => $ps->id,
-                'process_name' => $ps->process_name,
-                'ordinal' => $ps->id-1,
-                'created_at' => Carbon::now('Asia/Jakarta'),
-                'updated_at' => Carbon::now('Asia/Jakarta')
-            ];
-        })->toArray();
-        if(!empty($processSequenceOrders)){
-            ProcessSequenceOrder::insert($processSequenceOrders);
-        }
+        // Insert new order
+        $insertedOrderId = $this->orderService->addNewOrder($newOrder);
+        // dump($insertedOrder);
+
+        $this->orderId = $insertedOrderId;
+        $updated = $this->processSequenceOrderService->addNewProcessSequenceOrder($this->orderId);
+
+        OrderAdded::dispatch(Order::count());
+        OrderPendingAdded::dispatch(Order::where('status_process', 'pending')->count());
+
+        return $updated;
 
     }
 
@@ -108,13 +131,14 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
     }
 
     public function saveAndExit(){
-        $this->save();
+        if($this->save()){
+            $this->dialog()
+            ->question('Confirmation', 'New order added successfully. Do you want to edit the process sequence order?')
+            ->confirm('Yes', 'redirectToProcessSequenceOrder', $this->orderId)
+            ->cancel('No', 'exit')
+            ->send();
+        };
 
-        $this->dialog()
-        ->question('Confirmation', 'New order added successfully. Do you want to edit the process sequence order?')
-        ->confirm('Yes', 'redirectToProcessSequenceOrder', $this->orderId)
-        ->cancel('No', 'exit')
-        ->send();
     }
 
     public function redirectToProcessSequenceOrder(int $id){

@@ -5,10 +5,16 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Validate;
 use Livewire\Attributes\Lazy;
 use TallStackUi\Traits\Interactions;
+use App\Services\ProcessSequenceService;
 use App\Models\ProcessSequence;
 
 new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
 {
+    private ProcessSequenceService $processSequenceService;
+
+    public function boot(ProcessSequenceService $processSequenceService){
+        $this->processSequenceService = $processSequenceService;
+    }
     use Interactions;
 
     public ProcessSequence $processSequence;
@@ -30,7 +36,9 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
     }
 
     public function mount($id){
-        $this->processSequence = ProcessSequence::find($id);
+        // $this->processSequence = ProcessSequence::find($id);
+        $this->processSequence = $this->processSequenceService->getProcessSequence($id);
+
         $this->processId = $id;
         $this->processName = $this->processSequence->process_name;
         $this->alias = $this->processSequence->alias;
@@ -45,13 +53,19 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
             'alias' => $this->alias,
             'description' => $this->description,
         ]);
-        if($updated){
+        $updateProcessSequence = [
+            'id' => $this->processId,
+            'process_name' => $this->processName,
+            'alias' => $this->alias,
+            'description' => $this->description,
+        ];
+        if($this->processSequenceService->updateProcessSequence($updateProcessSequence)){
             $this->toast()
-            ->timeout(2)
-            ->success('Success', 'Data process sequence updated successfully')
-            ->hook([
-                'timeout' => [
-                    'method' => 'exit'
+                ->timeout(2)
+                ->success('Success', 'Data process sequence updated successfully')
+                ->hook([
+                    'timeout' => [
+                        'method' => 'exit'
                 ]
             ])
             ->send();

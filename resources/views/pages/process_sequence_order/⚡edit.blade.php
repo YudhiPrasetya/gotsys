@@ -4,6 +4,8 @@ use Livewire\Component;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Computed;
 use TallStackUi\Traits\Interactions;
+use App\Services\OrderService;
+use App\Services\ProcessSequenceOrderService;
 
 use App\Models\Order;
 use App\Models\ProcessSequence;
@@ -12,6 +14,14 @@ use Carbon\Carbon;
 
 new #[Layout('layouts::dashboard')] class extends Component
 {
+    private OrderService $orderService;
+    private ProcessSequenceOrderService $processSequenceOrderService;
+
+    public function boot(OrderService $orderService, ProcessSequenceOrderService $processSequenceOrderService){
+        $this->orderService = $orderService;
+        $this->processSequenceOrderService = $processSequenceOrderService;
+    }
+
     use Interactions;
 
     public $processSequences = [];
@@ -35,7 +45,8 @@ new #[Layout('layouts::dashboard')] class extends Component
     }
 
     public function getOrderInfo(int $id){
-        $this->order = Order::with(['customer:id,name'])->find($id);
+        // $this->order = Order::with(['customer:id,name'])->find($id);
+        $this->order = $this->orderService->getOrder($id);
         $this->customer = $this->order->customer->name;
         $this->product = $this->order->product_name;
         $this->quantity = $this->order->quantity;
@@ -46,8 +57,11 @@ new #[Layout('layouts::dashboard')] class extends Component
 
     // #[Computed]
     public function getProcessSequenceOrder(int $id){
-        $this->processSequenceOrders = ProcessSequenceOrder::with('processSequence')
-        ->where('order_id', $id)->orderBy('ordinal')->get();
+        // $this->processSequenceOrders = ProcessSequenceOrder::with('processSequence')
+        // ->where('order_id', $id)->orderBy('ordinal')->get();
+
+        $this->processSequenceOrders = $this->processSequenceOrderService->getProcessSequenceOrder($id);
+
         $this->findTheDiff();
 
     }
@@ -76,21 +90,25 @@ new #[Layout('layouts::dashboard')] class extends Component
 
     public function updateOrdinal($id, $position){
 
-        $tasks = ProcessSequenceOrder::where('order_id', $this->idOrder)->orderBy('ordinal')->get();
+        // $tasks = ProcessSequenceOrder::where('order_id', $this->idOrder)->orderBy('ordinal')->get();
 
-        $movedTask = $tasks->firstWhere('id', $id);
-        $tasks = $tasks->reject(fn($task) => $task->id == $id)->values();
+        // $movedTask = $tasks->firstWhere('id', $id);
+        // $tasks = $tasks->reject(fn( $task) => $task->id == $id)->values();
 
-        $tasks->splice($position, 0, [$movedTask]);
-        foreach($tasks as $index => $task){
-            ProcessSequenceOrder::where('id', $task->id)->update(['ordinal' => $index]);
+        // $tasks->splice($position, 0, [$movedTask]);
+        // foreach($tasks as $index => $task){
+        //     ProcessSequenceOrder::where('id', $task->id)->update(['ordinal' => $index]);
+        // }
+
+        $updated = $this->processSequenceOrderService->updatePosition($this->idOrder, $id, $position);
+        if($updated){
+            $this->getProcessSequenceOrder($this->idOrder);
+
+            $this->toast()
+                ->success('Success', 'Process Sequence Order updated successfully!')
+                ->timeout(1)
+            ->send();
         }
-        $this->getProcessSequenceOrder($this->idOrder);
-
-         $this->toast()
-        ->success('Success', 'Process Sequence Order updated successfully!')
-        ->timeout(1)
-        ->send();
     }
 
     public function remove(int $id){
@@ -102,7 +120,7 @@ new #[Layout('layouts::dashboard')] class extends Component
     }
 
     public function delete(int $id){
-        $deleted = ProcessSequenceOrder::find($id)->delete();
+        $deleted = $this->processSequenceOrderService->deleteProcessSequenceOrder($id);
         if($deleted){
             $this->toast()
             ->timeout(2)
@@ -227,11 +245,15 @@ new #[Layout('layouts::dashboard')] class extends Component
                     <x-checkbox.group class="mb-3" wire:model.live="selectedProcesSequences" label="Process sequence order" panel :options="$processSequences" />
 
                     <div class="flex flex-row-reverse gap-3">
-                        <x-button md wire:click="close" text="Close" color="red" light icon="x-circle" loading="close" spinner="dots" />
                         <x-button :disabled="empty($selectedProcesSequences)" wire:click="addProcessSequences" text="Add" color="green" light icon="plus" loading="addProcessSequences" spinner="wave" />
                     </div>
                 </x-accordion.items>
             </x-accordion>
+
+            <div class="flex flex-reverse my-4">
+                <x-button md wire:click="close" text="Close" color="red" light icon="x-circle" loading="close" spinner="dots" />
+            </div>
+
         </x-card>
     </div>
 </div>

@@ -4,19 +4,46 @@ use Livewire\Component;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Lazy;
 use Livewire\Attributes\Validate;
-use Livewire\Attributes\Computed;
+// use Livewire\Attributes\Computed;
 use TallStackUi\Traits\Interactions;
 
-use App\Models\Customer;
+use App\Services\OrderService;
+use App\Services\ProgressOrderService;
+use App\Services\CustomerService;
+use App\Services\ProcessSequenceOrderService;
+use App\Services\ProgressOrderDetailService;
+
+// use App\Models\Customer;
 use App\Models\Order;
 use App\Models\ProgressOrder;
-use App\Models\ProcessSequenceOrder;
+// use App\Models\ProgressOrderDetail;
+// use App\Models\ProcessSequenceOrder;
 use App\Models\ProcessSequence;
 
 use Carbon\Carbon;
+use App\Events\OrderRunningAdded;
+use App\Events\OrderPendingAdded;
+use App\Events\OrderFinishAdded;
+use App\Events\UpdateProgressOrderCharts;
 
 new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
 {
+    private OrderService $orderService;
+    private ProgressOrderService $progressOrderService;
+    private CustomerService $customerService;
+    private ProcessSequenceOrderService $processSequenceOrderService;
+    private ProgressOrderDetailService $progressOrderDetailService;
+
+    public function boot(OrderService $orderService, ProgressOrderService $progressOrderService, CustomerService $customerService,
+                        ProcessSequenceOrderService $processSequenceOrderService, ProgressOrderDetailService $progressOrderDetailService){
+
+        $this->orderService = $orderService;
+        $this->progressOrderService = $progressOrderService;
+        $this->customerService = $customerService;
+        $this->processSequenceOrderService = $processSequenceOrderService;
+        $this->progressOrderDetailService = $progressOrderDetailService;
+    }
+
     use Interactions;
 
     public $orderId;
@@ -43,20 +70,32 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
     public string $deadline = '';
 
     public function mount(int $id){
-        $this->selectedOrder = Order::find($id);
+        $this->selectedOrder = $this->orderService->getOrder($id);
         $this->orderId = $id;
         $this->deadline = $this->selectedOrder->deadline;
-        $this->customer = Customer::find($this->selectedOrder->customer_id);
-        $this->processSequenceOrders = ProcessSequenceOrder::where('order_id', $this->orderId)->get();
-        $this->progressOrders = ProgressOrder::where('order_id', $id)->get()->toArray();
-        // dump($this->progressOrders);
+
+        $this->customer = $this->customerService->getCustomer($this->selectedOrder->customer_id);
+
+        $this->processSequenceOrders = $this->getProcessSequenceOrders();
+
+        $this->progressOrders = $this->getProgressOrders();
 
         $this->getProcessMaxInput();
     }
 
-    private function getProcessMaxInput(){
-        $rstPSO = collect($this->processSequenceOrders)->toArray();
-        $rstPO = collect($this->progressOrders)->toArray();
+    public function getProcessSequenceOrders(){
+        return $this->processSequenceOrderService->getProcessSequenceOrder($this->orderId);
+    }
+
+    public function getProgressOrders(){
+        return $this->progressOrderService->getProgressOrderByOrderId($this->orderId);
+    }
+
+    // #[Computed]
+    public function getProcessMaxInput(){
+        // $rstPSO = collect($this->processSequenceOrders)->toArray();
+        $rstPSO = collect($this->getProcessSequenceOrders())->toArray();
+        $rstPO = collect($this->getProgressOrders())->toArray();
 
         $rstMatch = array_filter($rstPSO, fn($item) => in_array($item['process_sequence_id'], array_column($rstPO, 'process_sequence_id')));
         $rstMatch = collect($rstMatch)->map(function($item){
@@ -94,51 +133,80 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
     }
 
     public function checkPreviousProcess(){
+        // error_log($this->selectedProcessSequenceOrder);
         $this->qtyInputPrevProcess = 0;
         $this->qtyInput = 0;
         if($this->selectedProcessSequenceOrder > 1){
             $prevProcess = $this->selectedProcessSequenceOrder - 1;
             $findIdx = array_search($prevProcess, array_column($this->maxInputProcess, 'process_id'));
-            $this->qtyInputPrevProcess = $this->maxInputProcess[$findIdx]['qty_input'] - $this->maxInputProcess[$findIdx+1]['qty_input'];
-
-            if($this->qtyInputPrevProcess == 0){
+            if($this->maxInputProcess[$findIdx]['qty_input'] == 0){
                 $this->dialog()
                 ->warning('Warning', 'The previous process (' . $this->maxInputProcess[$findIdx]['title'] . ') not inputed yet at all.' )
                 ->send();
             }else{
-                $qtyInputSelectedProcess = $this->maxInputProcess[$findIdx+1]['qty_input'];
-                if($qtyInputSelectedProcess == $this->selectedOrder->quantity){
+                $findIdx = array_search($this->selectedProcessSequenceOrder, array_column($this->maxInputProcess, 'process_id'));
+                $qtyInputSelectedProcess = $this->selectedOrder->quantity - $this->maxInputProcess[$findIdx]['qty_input'];
+                if($qtyInputSelectedProcess == 0){
                     $this->dialog()
-                    ->info('Info', 'The selected process (' . $this->maxInputProcess[$findIdx+1]['title'] . ') has been done or full.' )
+                    ->info('Info', 'The selected process (' . $this->maxInputProcess[$findIdx]['title'] . ') has been done or full.' )
                     ->send();
+                }else{
+                    $this->qtyInputPrevProcess = $this->maxInputProcess[$findIdx-1]['qty_input'] - $this->maxInputProcess[$findIdx]['qty_input'];
                 }
+
             }
-        }else{
-            $this->qtyInputPrevProcess = $this->maxInputProcess[0]['max_input'];
+        }elseif($this->selectedProcessSequenceOrder == 1){
+            $findIdx = array_search($this->selectedProcessSequenceOrder, array_column($this->maxInputProcess, 'process_id'));
+            $qtyInputSelectedProcess = $this->selectedOrder->quantity - $this->maxInputProcess[$findIdx]['qty_input'];
+            // $this->qtyInputPrevProcess = $this->selectedOrder->quantity - $this->maxInputProcess[$findIdx]['qty_input'];
+            if($qtyInputSelectedProcess == 0){
+                $this->dialog()
+                ->info('Info', 'The selected process (' . $this->maxInputProcess[$findIdx]['title'] . ') has been done or full.' )
+                ->send();
+            }else{
+                $this->qtyInputPrevProcess = $qtyInputSelectedProcess;
+            }
+            error_log('$this->qtyInputPrevProcess: ' . $this->qtyInputPrevProcess);
         }
+        $this->qtyInput = $this->qtyInputPrevProcess;
     }
 
-    public function saveAndExit(){
+    private function save(){
+        $status = null;
+
         $this->validate();
 
         $idx = array_search($this->selectedProcessSequenceOrder, array_column($this->maxInputProcess, 'process_id'));
         $input = $this->maxInputProcess[$idx]['qty_input'];
         $psoId = $this->maxInputProcess[$idx]['process_id'];
+
         if($input == 0){
             // insert new progress order
-            $status = ProgressOrder::create([
+            $newPO = [
                 'order_id' => $this->orderId,
                 'process_sequence_id' => $psoId,
                 'qty' => $this->qtyInput
-            ]);
-        }else{
-            // update
-            $status = ProgressOrder::where('order_id', $this->orderId)
-                                                   ->where('process_sequence_id', $psoId)
-                                                   ->increment('qty', $this->qtyInput);
-        }
+            ];
+            $status = $this->progressOrderService->addNewProgressOrder($newPO);
 
-        if($status){
+        }else{
+            // update progress order
+            $this->progressOrderService->updateProgressOrderQty($this->orderId, $psoId, $this->qtyInput, $this->selectedOrder);
+
+            // insert to progress order detail table
+            $status = $this->progressOrderDetailService->addNewProgressOrderDetail($this->orderId, $psoId, $this->qtyInput);
+        }
+        return $status;
+
+    }
+
+    public function saveAndExit(){
+        if($this->save() != null){
+            OrderPendingAdded::dispatch(Order::where('status_process', 'pending')->count());
+            OrderRunningAdded::dispatch(Order::where('status_process', 'In Progress')->count());
+            OrderFinishAdded::dispatch(Order::where('status_process', 'Finish')->count());
+            UpdateProgressOrderCharts::dispatch('Update the progress order charts!');
+
             $this->toast()
             ->success('Success', 'Progress order updated successfully')
             ->timeout(1)
@@ -151,12 +219,42 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
         }
     }
 
+    public function saveAndInputAgain(){
+        // dump($this->save());
+        if($this->save() !== null){
+            OrderPendingAdded::dispatch(Order::where('status_process', 'pending')->count());
+            OrderRunningAdded::dispatch(Order::where('status_process', 'In Progress')->count());
+            OrderFinishAdded::dispatch(Order::where('status_process', 'Finish')->count());
+            UpdateProgressOrderCharts::dispatch('Update the progress order charts!');
+
+            $this->toast()
+            ->success('Success', 'Progress order updated successfully')
+            ->timeout(1)
+            ->position('top-center')
+            ->hook([
+                'timeout' => [
+                    'method' => 'cancel'
+                ]
+            ])->send();
+        }
+    }
+
+    // private function finishOrder($id){
+    //     Order::find($id)->update(['status_process' => 'Finish']);
+    // }
+
     public function close(){
         $this->exit();
     }
 
     public function exit(){
         $this->redirect('/progress_order', navigate: true);
+    }
+
+    public function cancel(){
+        $this->getProcessMaxInput();
+        $this->selectedProcessSequenceOrder = 0;
+        $this->qtyInput = 0;
     }
 
     public function placeholder(): string{
@@ -227,7 +325,8 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
             <x-errors />
 
             <x-slot:footer end>
-                <x-button text="Save" icon="plus" color="pink" wire:click="saveAndExit" loading="saveAndExit" spinner="bars" />
+                <x-button text="Save and Input Again" icon="plus" color="pink" wire:click="saveAndInputAgain" loading="saveAndInputAgain" spinner="bars" />
+                <x-button text="Save and Exit" icon="plus" color="pink" wire:click="saveAndExit" loading="saveAndExit" spinner="bars" />
                 <x-button text="Cancel" color="olive" wire:click="cancel" loading="cancel" spinner="bars" />
                 <x-button text="Exit" color="mauve" wire:click="close" loading="close" spinner="bars" />
             </x-slot:footer>

@@ -5,10 +5,17 @@ use Livewire\Attributes\Layout;
 use Livewire\Attributes\Lazy;
 use Livewire\WithPagination;
 use TallStackUi\Traits\Interactions;
+use App\Services\ProcessSequenceService;
 use App\Models\ProcessSequence;
 
 new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
 {
+    private ProcessSequenceService $processSequenceService;
+    public function boot(ProcessSequenceService $processSequenceService){
+        $this->processSequenceService = $processSequenceService;
+    }
+
+
     use WithPagination, Interactions;
 
     public array $headers = [
@@ -37,7 +44,8 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
                 ['index' => 'description', 'label' => 'Description', 'sortable' => false],
                 ['index' => 'action']
             ],
-            'rows' => ProcessSequence::query()->paginate(10)->withQueryString()
+            // 'rows' => ProcessSequence::query()->paginate(10)->withQueryString()
+            'rows' => $this->processSequenceService->processSequenceList()
         ];
     }
 
@@ -51,18 +59,20 @@ new #[Layout('layouts::dashboard')] #[Lazy] class extends Component
     }
 
     public function deleteProcessSequence(string $id){
-        ProcessSequence::find($id)?->delete();
+        // ProcessSequence::find($id)?->delete();
+        $deleted = $this->processSequenceService->deleteProcessSequence((int)$id);
 
-        $this->toast()
-             ->timeout(2)
-             ->success('Deleted', 'Record has been removed')
-             ->position('top-center')
-             ->hook([
+        if($deleted){
+            $this->toast()
+                ->timeout(2)
+                ->success('Deleted', 'Record has been removed')
+                ->position('top-center')
+                ->hook([
                 'timeout' => [
                     'method' => 'redirectToProcessSequence'
                 ]
-             ])
-             ->send();
+            ])->send();
+        }
     }
 
     public function redirectToProcessSequence(){

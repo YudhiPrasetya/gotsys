@@ -4,12 +4,19 @@ use Livewire\Component;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Lazy;
 use Livewire\WithPagination;
+use App\Services\CustomerService;
 use App\Models\Customer;
 
 use TallStackUi\Traits\Interactions;
 
 new #[Lazy] #[Layout('layouts::dashboard')] class extends Component
 {
+    private CustomerService $customerService;
+
+    public function boot(CustomerService $customerService){
+        $this->customerService = $customerService;
+    }
+
     use WithPagination, Interactions;
 
     public array $headers = [
@@ -19,6 +26,8 @@ new #[Lazy] #[Layout('layouts::dashboard')] class extends Component
                     ['index' => 'phone', 'label' => 'Phone'],
                     ['index' => 'action']
     ];
+
+
 
     public function placeholder(): string{
         return <<<'HTML'
@@ -38,7 +47,8 @@ new #[Lazy] #[Layout('layouts::dashboard')] class extends Component
                 ['index' => 'action']
             ],
             // 'rows' => Customer::query()->paginate(5)->withQueryString()
-            'rows' => Customer::selectRaw("id, name, address, CONCAT(prefix_phone,'',phone) as phone")->paginate(5)->withQueryString()
+            // 'rows' => Customer::selectRaw("id, name, address, CONCAT(prefix_phone,'',phone) as phone")->paginate(5)->withQueryString()
+            'rows' => $this->customerService->customerList()
         ];
     }
 
@@ -53,18 +63,19 @@ new #[Lazy] #[Layout('layouts::dashboard')] class extends Component
     }
 
     public function deleteCustomer(string $id){
-        Customer::find($id)?->delete();
-
-        $this->toast()
-             ->timeout(2)
-             ->success('Deleted', 'Record has been removed')
-             ->position('top-center')
-             ->hook([
-                'timeout' => [
-                    'method' => 'redirectToCustomer'
-                ]
-             ])
-             ->send();
+        $deleted = $this->customerService->deleteCustomer((int)$id);
+        if($deleted){
+            $this->toast()
+                 ->timeout(2)
+                 ->success('Deleted', 'Record has been removed')
+                 ->position('top-center')
+                 ->hook([
+                    'timeout' => [
+                        'method' => 'redirectToCustomer'
+                    ]
+                 ])
+                 ->send();
+        }
     }
 
     public function redirectToCustomer(){

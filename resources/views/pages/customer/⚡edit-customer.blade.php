@@ -4,10 +4,17 @@ use Livewire\Component;
 use Livewire\Attributes\Layout;
 use Livewire\Attributes\Validate;
 use TallStackUi\Traits\Interactions;
+use App\Services\CustomerService;
 use App\Models\Customer;
 
 new #[Layout('layouts::dashboard')] class extends Component
 {
+    private CustomerService $customerService;
+
+    public function boot(CustomerService $customerService){
+        $this->customerService = $customerService;
+    }
+
     use Interactions;
 
     public Customer $customer;
@@ -24,7 +31,9 @@ new #[Layout('layouts::dashboard')] class extends Component
     public string $customerPhone = '';
 
     public function mount($id){
-        $this->customer = Customer::find($id);
+        // $this->customer = Customer::find($id);
+        $this->customer = $this->customerService->getCustomer($id);
+
         $this->customerId = $id;
         $this->customerName = $this->customer->name;
         $this->customerAddress = $this->customer->address;
@@ -33,13 +42,22 @@ new #[Layout('layouts::dashboard')] class extends Component
     }
 
     public function saveAndExit(){
-        $updated = $this->customer->update([
+        // $updated = $this->customer->update([
+        //     'id' => $this->customerId,
+        //     'name' => $this->customerName,
+        //     'address' => $this->customerAddress,
+        //     'prefix_phone' => $this->prefixPhone,
+        //     'phone' => $this->customerPhone
+        // ]);
+        $customer = [
             'id' => $this->customerId,
             'name' => $this->customerName,
             'address' => $this->customerAddress,
             'prefix_phone' => $this->prefixPhone,
             'phone' => $this->customerPhone
-        ]);
+        ];
+        $updated = $this->customerService->updateCustomer($customer);
+
         if($updated){
             $this->toast()
             ->timeout(2)

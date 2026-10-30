@@ -89,13 +89,16 @@ new #[Layout('layouts::app')] class extends Component
                     <span class="text-gray-200">Username or email</span>
                 </x-slot:label>
             </x-input> --}}
+    {{-- <x-card image="{{ asset('images/unlocked.jpg') }}" /> --}}
 
+    <img src="{{ asset('images/unlocked.jpg') }}" alt="Unlocked" class="mx-auto h-64 w-64 rounded-full object-cover" />
+    
     <x-input label="Username or email *" icon="users" hint="Insert your username or email" wire:model="login" />
 
     <x-password label="Password *" icon="lock-closed" hint="Insert your password" wire:model="password" />
 
     <x-checkbox label="Remember Me" wire:model="remember" />
 
-    <x-button text="Submit" icon="arrow-up-on-square" block outline color="purple" light wire:click="authenticate" loading="authenticate" spinner="wave" />
+    <x-button text="Login" icon="lock-open" block color="purple" wire:click="authenticate" loading="authenticate" spinner="wave" />
     {{-- </form> --}}
 </div>
